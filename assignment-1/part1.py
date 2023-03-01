@@ -61,8 +61,24 @@ def calculate_annualized_covariance(
     )
 
 
-def calculate_correlation_coefficient(*args, **kwargs) -> float:
-    pass
+def calculate_correlation_coefficient(
+    a_stock_records: List[StockRecord],
+    b_stock_records: List[StockRecord],
+) -> float:
+    """
+    sd_annual_a           : the stock annualized standard deviation for Stock A
+    sd_annual_b           : the stock annualized standard deviation for Stock B
+    annualized_covariance : the annualized covariance between Stock A and Stock B
+
+    correlation_coefficient = sd_ab / (sd_a * sd_b)
+    """
+    sd_annual_a = calculate_annualized_standard_deviation(a_stock_records)
+    sd_annual_b = calculate_annualized_standard_deviation(b_stock_records)
+    annualized_covariance = calculate_annualized_covariance(
+        a_stock_records,
+        b_stock_records,
+    )
+    return annualized_covariance / (sd_annual_a * sd_annual_b)
 
 
 def run(
@@ -85,6 +101,21 @@ def run(
             a_stock_records = read_history_records(a_stock.code)
             b_stock_records = read_history_records(b_stock.code)
             annualized_covariance = calculate_annualized_covariance(
+                a_stock_records,
+                b_stock_records,
+            )
+            print(f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_covariance}')
+
+    print()
+
+    print('Correlation Coefficient')
+    for a_stock in stocks:
+        for b_stock in stocks:
+            if a_stock.code == b_stock.code:
+                continue
+            a_stock_records = read_history_records(a_stock.code)
+            b_stock_records = read_history_records(b_stock.code)
+            annualized_covariance = calculate_correlation_coefficient(
                 a_stock_records,
                 b_stock_records,
             )
