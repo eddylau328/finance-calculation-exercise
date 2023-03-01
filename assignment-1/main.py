@@ -1,8 +1,12 @@
+import argparse
 from typing import Callable, List, Tuple
+
 import pandas as pd
 
 from common import Stock, StockRecord
 import part1
+import part2
+
 
 STOCK_DATA_FILE_PATH = './assignment 1 stock data.xlsx'
 EXPECTED_RETURN_SHEET_NAME = 'Consensus Expected return'
@@ -46,13 +50,33 @@ def setup() -> Tuple[List[Stock], Callable[[int], List[StockRecord]]]:
     return stocks, read_history_records 
 
 
-def main():
+def main(parts: List[str]):
     stocks, read_history_records = setup()
-    part1.run(
-        stocks,
-        read_history_records,
-    )
+
+    if 'part1' in parts:
+        print("Part 1")
+        part1.run(
+            stocks,
+            read_history_records,
+        )
+        print()
+
+    if 'part2' in parts:
+        print("Part 2")
+        part2.run(
+            stocks,
+            read_history_records,
+        )
+        print()
     
 
 if __name__ == '__main__':
-    main()
+    run_parts = ['part1', 'part2', 'part3']
+    parser = argparse.ArgumentParser(description = 'CMSC5718 Assignment 1')
+    parser.add_argument('part_arg', type=str, default=run_parts, nargs='*',
+                        help=f'An optional string for running specific parts, i.e. {run_parts}')
+    args = parser.parse_args()
+    if not all([p in run_parts for p in args.part_arg]):
+        raise Exception(f'Invalid arguments {args.part_arg}')
+
+    main(args.part_arg)
