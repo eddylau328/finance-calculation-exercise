@@ -56,5 +56,5 @@ def run(
         stocks,
         read_history_records,
     )
-    print(f'Expected Return of EW    {portfolio_standard_deviation}')
+    print(f'Expected Return of EW    {portfolio_expected_return}')
     print(f'Standard Deviation of EW {portfolio_standard_deviation}')
