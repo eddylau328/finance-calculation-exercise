@@ -1,6 +1,7 @@
 from typing import Callable, List
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from common import Stock, StockRecord
 from part1 import calculate_stock_price_returns
@@ -126,16 +127,16 @@ def calculate_global_minimum_variance_portfolio(
     # First N linear equations
     for i in range(len(stocks)):
         # initialize
-        equation = np.ones(len(stocks)+2)
+        equation = np.zeros(len(stocks)+2)
         # w_1 to w_N
         for j in range(len(stocks)):
             if i == j:
-                equation[j] *= standard_deviations[j]**2 + covariance_matrix[i][j]
+                equation[j] = standard_deviations[j]**2 + covariance_matrix[i][j]
             else:
-                equation[j] *= covariance_matrix[i][j]
+                equation[j] = covariance_matrix[i][j]
         # λ_1, λ_2 setup
-        equation[len(stocks)] *= -expected_returns[i]
-        equation[len(stocks)+1] *= -1
+        equation[len(stocks)] = -expected_returns[i]
+        equation[len(stocks)+1] = -1
 
         if i == 0:
             linear_matrix = equation
@@ -155,8 +156,8 @@ def calculate_global_minimum_variance_portfolio(
 
     results = None
     for i in range(len(stocks)):
-        # position 11, 12 = array index 10, 11
-        equation = np.array([linear_matrix_inv[i][10], linear_matrix_inv[i][11]])
+        # position N+1, N+2 = array index N, N+1
+        equation = np.array([linear_matrix_inv[i][len(stocks)], linear_matrix_inv[i][len(stocks)+1]])
         if i == 0:
             results = equation
         else:
@@ -171,6 +172,61 @@ def calculate_global_minimum_variance_portfolio(
             respresentation += '- '
         respresentation += f'{np.abs(np.round(results[i][1], 4))}'
         print(respresentation)
+    
+    # sd_p^2 = nΣi=1(w_i^2 * sd_i^2) + nΣj=1(nΣk=1(w_j * w_k * cov_j_k))
+    # sd_p^2 = c1 + c2 * r_p + c3 * r_p^2
+    # index 0 is constant
+    # index 1 is r_p
+    # index 2 is r_p^2
+    equation = np.zeros(3, np.float64)
+
+    # solve for constant
+    for i in range(len(stocks)):
+        equation[0] += results[i][1] * standard_deviations[i]**2
+        for j in range(len(stocks)):
+            for k in range(len(stocks)):
+                equation[0] += results[j][1] * results[k][1]
+
+    # solve for r_p
+    for i in range(len(stocks)):
+        equation[1] += 2 * results[i][0] * results[i][1] * standard_deviations[i]**2
+        for j in range(len(stocks)):
+            for k in range(len(stocks)):
+                equation[1] += results[j][0] * results[k][1] * covariance_matrix[j][k]
+                equation[1] += results[k][0] * results[j][1] * covariance_matrix[j][k]
+
+    # solve for r_p^2
+    for i in range(len(stocks)):
+        equation[2] += results[i][0]**2 * standard_deviations[i]**2
+        for j in range(len(stocks)):
+            for k in range(len(stocks)):
+                equation[2] += results[j][0] * results[k][0] * covariance_matrix[j][k]
+
+    print()
+    respresentation = ''
+    for i, variable in enumerate(['', 'r_p', 'r_p^2']):
+        if np.sign(equation[i]) == -1:
+            respresentation += ' - '
+        elif i != 0:
+            respresentation += ' + '
+        respresentation += f'{np.abs(np.round(equation[i], 4))}'
+        if variable:
+            respresentation += f' * {variable}'
+
+    respresentation = f'sd_p = sqrt({respresentation})'
+    print(respresentation)
+
+    r_p = np.linspace(
+        np.min(expected_returns),
+        np.max(expected_returns),
+        1000,
+    )
+    sd_p = np.sqrt(equation[0] + equation[1] * r_p + equation[2] * r_p**2)
+
+    plt.plot(sd_p, r_p)
+    plt.xlabel("Portfolio Variance")
+    plt.ylabel("Portfolio Return")
+    plt.show()
 
 
 def run(
@@ -192,4 +248,5 @@ def run(
     print(f'Expected Return of EW    {portfolio_expected_return}')
     print(f'Standard Deviation of EW {portfolio_standard_deviation}')
 
+    print()
     calculate_global_minimum_variance_portfolio(stocks, read_history_records)
