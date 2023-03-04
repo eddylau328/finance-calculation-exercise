@@ -130,7 +130,7 @@ def calculate_global_minimum_variance_portfolio(
         # w_1 to w_N
         for j in range(len(stocks)):
             if i == j:
-                equation[j] *= standard_deviations[j] + covariance_matrix[i][j]
+                equation[j] *= standard_deviations[j]**2 + covariance_matrix[i][j]
             else:
                 equation[j] *= covariance_matrix[i][j]
         # λ_1, λ_2 setup
