@@ -1,5 +1,6 @@
 from datetime import datetime
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
@@ -24,3 +25,17 @@ class StockRecord:
     """
     date: datetime
     price: float
+
+
+@dataclass
+class GlobalMinimumVariancePortfolio:
+    """ MV Portfolio data
+    standard_deviation: portfolio standard deviation
+    variance:           portfolio variance
+    expected_return:    portfolio expected return
+    weights:            portfolio weights
+    """
+    standard_deviation: float
+    variance: float
+    expected_return: float
+    weights: List[float]
