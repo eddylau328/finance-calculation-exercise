@@ -154,6 +154,16 @@ def calculate_global_minimum_variance_portfolio(
     ])
     linear_matrix_inv = np.linalg.inv(linear_matrix)
 
+    # update fuck
+    test = np.hstack((2 * covariance_matrix, np.ones((len(stocks), 1), np.float64)))
+    test = np.vstack((test, np.ones(len(stocks)+1, np.float64)))
+    test[len(stocks)][len(stocks)] = 0
+    test_inv = np.linalg.inv(test)
+    test_ans = np.append(np.zeros(len(stocks), np.float64), 1.0)
+    global_minimum_variance_weights = np.dot(test_inv, test_ans)[0:10]
+    print(global_minimum_variance_weights)
+    print(np.sum(global_minimum_variance_weights))
+
     results = None
     for i in range(len(stocks)):
         # position N+1, N+2 = array index N, N+1
@@ -182,10 +192,10 @@ def calculate_global_minimum_variance_portfolio(
 
     # solve for constant
     for i in range(len(stocks)):
-        equation[0] += results[i][1] * standard_deviations[i]**2
+        equation[0] += results[i][1]**2 * standard_deviations[i]**2
         for j in range(len(stocks)):
             for k in range(len(stocks)):
-                equation[0] += results[j][1] * results[k][1]
+                equation[0] += results[j][1] * results[k][1] * covariance_matrix[j][k]
 
     # solve for r_p
     for i in range(len(stocks)):
@@ -216,6 +226,25 @@ def calculate_global_minimum_variance_portfolio(
     respresentation = f'sd_p = sqrt({respresentation})'
     print(respresentation)
 
+    print()
+    print('Minimum expected return: ', np.round(np.min(expected_returns),4))
+    print('Maximum expected return: ', np.round(np.max(expected_returns),4))
+
+    # generate random weights
+    test_data_sizes = 10000
+    test_weights = np.random.rand(test_data_sizes, len(stocks))
+    test_weights = test_weights / test_weights.sum(axis=1)[:, np.newaxis]
+    # sd_p^2 = nΣi=1(w_i^2 * sd_i^2) + nΣi=1(nΣj=1(w_i * w_j * cov_i_j))
+    test_sd_p = np.zeros(test_data_sizes, np.float64)
+    for k in range(test_data_sizes):
+        for i in range(len(stocks)):
+            for j in range(len(stocks)):
+                test_sd_p[k] += test_weights[k][i] * test_weights[k][j] * covariance_matrix[i][j]
+    test_sd_p += np.dot(test_weights**2, standard_deviations**2)
+    test_sd_p = np.sqrt(test_sd_p)
+    #  avg_r_p = nΣi=1(w_i * avg_r_i)
+    test_r_p = np.dot(test_weights, expected_returns)
+
     r_p = np.linspace(
         np.min(expected_returns),
         np.max(expected_returns),
@@ -224,7 +253,20 @@ def calculate_global_minimum_variance_portfolio(
     sd_p = np.sqrt(equation[0] + equation[1] * r_p + equation[2] * r_p**2)
 
     plt.plot(sd_p, r_p)
-    plt.xlabel("Portfolio Variance")
+    plt.scatter(test_sd_p, test_r_p)
+    fk = 0
+    for i in range(len(stocks)):
+        for j in range(len(stocks)):
+            fk += global_minimum_variance_weights[i] * global_minimum_variance_weights[j] * covariance_matrix[i][j]
+    fk += np.dot(global_minimum_variance_weights**2, standard_deviations**2)
+    fk = np.sqrt(fk)
+    plt.scatter(
+        # [np.dot(np.dot(global_minimum_variance_weights, covariance_matrix), global_minimum_variance_weights)],
+        [fk],
+        [np.dot(global_minimum_variance_weights, expected_returns)],
+        color='red',
+    )
+    plt.xlabel("Portfolio Standard Deviation")
     plt.ylabel("Portfolio Return")
     plt.show()
 
