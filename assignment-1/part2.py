@@ -1,42 +1,36 @@
-from typing import Callable, List
+from typing import Callable, List, Optional
 from functools import reduce
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from common import Stock, StockRecord, GlobalMinimumVariancePortfolio
-from part1 import calculate_stock_price_returns
-
-
-def calculate_expected_return(stock_records: List[StockRecord]) -> float:
-    returns = calculate_stock_price_returns(stock_records)
-    return np.mean(returns)
-
-
-def calculate_standard_deviation(stock_records: List[StockRecord]) -> float:
-    returns = calculate_stock_price_returns(stock_records)
-    return np.std(returns)
+from part1 import (
+    calculate_annualized_standard_deviation,
+    calculate_annualized_covariance,
+)
 
 
 def calculate_covariance_matrix(
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
 ) -> np.ndarray:
-    returns_matrix = np.array([
-        calculate_stock_price_returns(read_history_records(stock.code))
-        for stock in stocks
-    ])
-    return np.cov(returns_matrix)
+    covariance_matrix = np.zeros((len(stocks), len(stocks)), np.float64)
+    for i, stocks_a in enumerate(stocks):
+        for j, stocks_b in enumerate(stocks):
+            covariance_matrix[i][j] = calculate_annualized_covariance(
+                read_history_records(stocks_a.code),
+                read_history_records(stocks_b.code),
+            )
+    return covariance_matrix
 
 
 def calculate_portfolio_expected_return(
     weights: List[float],
     stocks: List[Stock],
-    read_history_records: Callable[[int], List[StockRecord]],
 ) -> float:
     expected_returns = np.array([
-        calculate_expected_return(read_history_records(stock.code))
-        for stock in stocks
+        stock.expected_return for stock in stocks
     ])
     return np.dot(expected_returns, np.array(weights))
 
@@ -45,6 +39,7 @@ def calculate_portfolio_standard_deviation(
     weights: List[float],
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
+    covariance_matrix: Optional[np.ndarray] = None,
 ) -> float:
     """
     result: nΣi((w_i)**2(q_i)**2)+nΣj(nΣk(w_j * w_k * q_jk))
@@ -52,10 +47,11 @@ def calculate_portfolio_standard_deviation(
     use the matrix method sd_p^2 = (w^T)(cov)(w)
     """
     weights = np.array(weights)
-    covariance_matrix = calculate_covariance_matrix(
-        stocks,
-        read_history_records,
-    )
+    if type(covariance_matrix) is not np.ndarray:
+        covariance_matrix = calculate_covariance_matrix(
+            stocks,
+            read_history_records,
+        )
     portfolio_variance = np.dot(weights, covariance_matrix)
     portfolio_variance = np.dot(portfolio_variance, weights)
     return np.sqrt(portfolio_variance)
@@ -64,6 +60,7 @@ def calculate_portfolio_standard_deviation(
 def calculate_global_minimum_variance_portfolio(
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]], 
+    covariance_matrix: Optional[np.ndarray] = None,
 ) -> GlobalMinimumVariancePortfolio:
     """
     Reference: (not all correct)
@@ -97,7 +94,9 @@ def calculate_global_minimum_variance_portfolio(
     Σ = covariance matrix
 
     """
-    covariance_matrix = calculate_covariance_matrix(stocks, read_history_records)
+    if type(covariance_matrix) is not np.ndarray:
+        covariance_matrix = calculate_covariance_matrix(stocks, read_history_records)
+
     linear_matrix = np.hstack((2 * covariance_matrix, np.ones((len(stocks), 1), np.float64)))
     linear_matrix = np.vstack((linear_matrix, np.ones(len(stocks)+1, np.float64)))
     linear_matrix[len(stocks)][len(stocks)] = 0
@@ -107,7 +106,6 @@ def calculate_global_minimum_variance_portfolio(
     minimum_expected_return = calculate_portfolio_expected_return(
         list(minimum_weights),
         stocks,
-        read_history_records,
     )
     minimum_variance = reduce(np.dot, [minimum_weights, covariance_matrix, minimum_weights])
     return GlobalMinimumVariancePortfolio(
@@ -120,6 +118,7 @@ def calculate_global_minimum_variance_portfolio(
 def calculate_efficient_frontier(
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
+    covariance_matrix: Optional[np.ndarray] = None,
 ):
     """
     Reference: (not all correct)
@@ -134,7 +133,7 @@ def calculate_efficient_frontier(
 
     Introduce Lagrange multipliers, with λ
 
-    L = sd_p^2 - λ * (nΣi=1(w_i * r_i) - r_p)
+    L = sd_p^2 + λ_1 * (nΣi=1(w_i * r_i) - r_p) + λ_2 * (nΣi=1(w_i) - 1)
 
     Differentiating L w.r.t. to each w_i:
 
@@ -157,10 +156,10 @@ def calculate_efficient_frontier(
 
     """
     N = len(stocks)
-    covariance_matrix = calculate_covariance_matrix(stocks, read_history_records)
-    expected_returns = np.array([
-        calculate_expected_return(read_history_records(stock.code))
-    for stock in stocks])
+    if type(covariance_matrix) is not np.ndarray:
+        covariance_matrix = calculate_covariance_matrix(stocks, read_history_records)
+
+    expected_returns = np.array([stock.expected_return for stock in stocks])
     linear_matrix = np.hstack((2 * covariance_matrix, np.transpose(np.array([expected_returns])), np.ones((N, 1), np.float64)))
     linear_matrix = np.vstack((linear_matrix, np.concatenate((expected_returns, np.zeros(2, np.float64)))))
     linear_matrix = np.vstack((linear_matrix, np.concatenate((np.ones(N, np.float64), np.zeros(2, np.float64)))))
@@ -219,7 +218,7 @@ def calculate_efficient_frontier(
             sub_part_b *= 2 * covariance_matrix[i][j]
             sub_part_b *= (
                 weight_linear_equations[i][0] * weight_linear_equations[j][1] +
-                weight_linear_equations[j][0] * weight_linear_equations[i][0]
+                weight_linear_equations[j][0] * weight_linear_equations[i][1]
             )
             B += sub_part_b
             sub_part_c = 1
@@ -230,23 +229,46 @@ def calculate_efficient_frontier(
 
     print(f'sd_p^2 = {A} * r_p^2 + {B} * r_p + {C}')
     r_p = np.linspace(
-        0,
+        np.min(expected_returns),
         np.max(expected_returns),
         1000,
     )
-    sd_p = np.sqrt(A * r_p**2 + B * r_p + C)
+    sd_p = np.sqrt(1/2*(A * r_p**2 + B * r_p + C))
 
+    portfolio = calculate_global_minimum_variance_portfolio(stocks, read_history_records)
 
-    # plt.scatter(
-    #     # [np.dot(np.dot(global_minimum_variance_weights, covariance_matrix), global_minimum_variance_weights)],
-    #     [fk],
-    #     [np.dot(global_minimum_variance_weights, expected_returns)],
-    #     color='red',
-    # )
-    # plt.plot(sd_p, r_p)
-    # plt.xlabel("Portfolio Standard Deviation")
-    # plt.ylabel("Portfolio Return")
-    # plt.show()
+    test_data_sizes = 100000
+    test_weights = np.random.rand(test_data_sizes, len(stocks))
+    test_weights = test_weights / test_weights.sum(axis=1)[:, np.newaxis]
+
+    # sd_p^2 = nΣi=1(w_i^2 * sd_i^2) + nΣi=1(nΣj=1(w_i * w_j * cov_i_j))
+    test_sd_p = np.zeros(test_data_sizes, np.float64)
+    for k in range(test_data_sizes):
+        for i in range(len(stocks)):
+            for j in range(len(stocks)):
+                test_sd_p[k] += test_weights[k][i] * test_weights[k][j] * covariance_matrix[i][j]
+
+    test_sd_p += np.dot(test_weights**2, np.diag(covariance_matrix))
+    test_sd_p = np.sqrt(test_sd_p)
+    #  avg_r_p = nΣi=1(w_i * avg_r_i)
+    test_r_p = np.dot(test_weights, expected_returns) 
+
+    plt.scatter(
+        test_sd_p,
+        test_r_p,
+        color='blue',
+        s=2,
+    )
+    plt.scatter(
+        [portfolio.standard_deviation],
+        [portfolio.expected_return],
+        color='red',
+        s=4,
+    )
+    plt.plot(sd_p, r_p)
+    plt.xlabel("Portfolio Standard Deviation")
+    plt.ylabel("Portfolio Return")
+    plt.show()
 
 
 def run(
@@ -255,28 +277,37 @@ def run(
 ):
     weights = [0.1] * len(stocks)
 
-    portfolio_expected_return = calculate_portfolio_expected_return(
-        weights,
+    covariance_matrix = calculate_covariance_matrix(
         stocks,
         read_history_records,
     )
-    portfolio_standard_deviation = calculate_portfolio_standard_deviation(
-        weights,
-        stocks,
-        read_history_records,
-    )
-    print(f'Expected Return of EW    {portfolio_expected_return}')
-    print(f'Standard Deviation of EW {portfolio_standard_deviation}')
 
-    print()
+    # portfolio_expected_return = calculate_portfolio_expected_return(
+    #     weights,
+    #     stocks,
+    # )
+    # portfolio_standard_deviation = calculate_portfolio_standard_deviation(
+    #     weights,
+    #     stocks,
+    #     read_history_records,
+    #     covariance_matrix,
+    # )
+    # print(f'Expected Return of EW    {portfolio_expected_return}')
+    # print(f'Standard Deviation of EW {portfolio_standard_deviation}')
 
-    global_mv_portfolio = calculate_global_minimum_variance_portfolio(stocks, read_history_records)
-    print('Global minimum variance portfolio')
-    print(f'Portfolio variance           {global_mv_portfolio.variance}')
-    print(f'Portfolio standard deviation {global_mv_portfolio.standard_deviation}')
-    print(f'Portfolio expected return    {global_mv_portfolio.expected_return}')
-    print('Portfolio weights:')
-    for i, stock in enumerate(stocks):
-        print(f'Stock {stock.code:>5} weight = {global_mv_portfolio.weights[i]}')
+    # print()
 
-    calculate_efficient_frontier(stocks, read_history_records)
+    # global_mv_portfolio = calculate_global_minimum_variance_portfolio(
+    #     stocks,
+    #     read_history_records,
+    #     covariance_matrix,
+    # )
+    # print('Global minimum variance portfolio')
+    # print(f'Portfolio variance           {global_mv_portfolio.variance}')
+    # print(f'Portfolio standard deviation {global_mv_portfolio.standard_deviation}')
+    # print(f'Portfolio expected return    {global_mv_portfolio.expected_return}')
+    # print('Portfolio weights:')
+    # for i, stock in enumerate(stocks):
+    #     print(f'Stock {stock.code:>5} weight = {global_mv_portfolio.weights[i]}')
+
+    calculate_efficient_frontier(stocks, read_history_records, covariance_matrix)
