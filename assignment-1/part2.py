@@ -2,6 +2,7 @@ import itertools
 from typing import Callable, List
 
 import numpy as np
+import math
 
 from common import Stock, StockRecord
 from part1 import calculate_stock_price_returns
@@ -9,6 +10,12 @@ from part1 import calculate_stock_price_returns
 from matplotlib import pyplot as plt
 from scipy.optimize import minimize
 from scipy.ndimage.filters import gaussian_filter1d
+
+
+def generate_dirichlet_sets(n, k):
+    alpha = np.ones(k)  # Set alpha parameter to 1
+    sets = np.random.dirichlet(alpha, n)
+    return sets
 
 
 def calculate_portfolio_expected_return(
@@ -99,17 +106,22 @@ def draw_efficient_frontier(
     p_return = np.zeros(num_portfolios)
     p_sd = np.zeros(num_portfolios)
 
-    for _ in range(num_portfolios):
-        weights =  np.random.uniform(low=0, high=1, size=10)
-        weights = weights/np.sum(weights)
+    weights_sets = generate_dirichlet_sets(num_portfolios, num_assets)
+
+    for idx in range(num_portfolios):
+        # weights =  np.random.uniform(low=0, high=1, size=10)
+        # weights = weights/np.sum(weights)
+        weights = weights_sets[idx]
         returns = np.dot(weights, expected_returns) # Returns are the product of individual expected returns of asset and its
         sd = objective_function(weights)
 
-        p_weights[_] = np.array(weights)
-        p_return[_] = returns
-        p_sd[_] = sd
+        p_weights[idx] = np.array(weights)
+        p_return[idx] = returns
+        p_sd[idx] = sd
 
+    
     #-- Skip over dominated portfolios
+    dominated_weights = []
     dominated_returns = []
     dominated_sd = []
 
@@ -121,11 +133,12 @@ def draw_efficient_frontier(
                     dominated = True
                     break
         if not dominated:
+            dominated_weights.append(p_weights[i])
             dominated_returns.append(p_return[i])
             dominated_sd.append(p_sd[i])
 
     # create a list of tuples pairing each dominated return with its corresponding dominated standard deviation
-    dominated_data = list(zip(dominated_returns, dominated_sd))
+    dominated_data = list(zip(dominated_returns, dominated_sd, dominated_weights))
 
     # sort the dominated data by the second element of each tuple (i.e., by the standard deviation)
     sorted_dominated_data = sorted(dominated_data, key=lambda x: x[1])
@@ -133,17 +146,18 @@ def draw_efficient_frontier(
     # extract the sorted returns and standard deviations into separate lists
     sorted_dominated_returns = [data[0] for data in sorted_dominated_data]
     sorted_dominated_sd = [data[1] for data in sorted_dominated_data]
+    sorted_dominated_weights = [data[2] for data in sorted_dominated_data]
 
     dominated_returns = sorted_dominated_returns
     dominated_sd = sorted_dominated_sd
 
-    smoothed_dominated_sd = gaussian_filter1d(dominated_sd, sigma=2)
-    smoothed_dominated_returns = gaussian_filter1d(dominated_returns, sigma=2)
+    smoothed_dominated_sd = gaussian_filter1d(dominated_sd, sigma=3)
+    smoothed_dominated_returns = gaussian_filter1d(dominated_returns, sigma=3)
 
     # plot
     plt.figure(figsize=(10, 7))
-    plt.scatter(p_sd, p_return, c=p_return/p_sd, marker='.')
-    plt.plot(smoothed_dominated_sd, smoothed_dominated_returns, color="r")
+    plt.scatter(p_sd, p_return, c=p_return/p_sd, marker='.', s=5) 
+    # plt.plot(smoothed_dominated_sd, smoothed_dominated_returns, color="r")
     plt.grid(True)
     plt.xlabel('sd')
     plt.ylabel('Expected Return')
@@ -151,7 +165,7 @@ def draw_efficient_frontier(
 
     # plt.show()
 
-    return smoothed_dominated_sd, smoothed_dominated_returns
+    return smoothed_dominated_sd, smoothed_dominated_returns, sorted_dominated_weights
 
 
 def find_optimal_portfolio(
@@ -184,9 +198,9 @@ def find_optimal_portfolio(
 
     initial_weights =  np.random.uniform(low=0, high=1, size=10)
 
-    result = minimize(objective_function, initial_weights, method='SLSQP', constraints=constraints, bounds=bounds)
-
-    print(result)
+    result = minimize(objective_function, initial_weights, method='SLSQP', constraints=constraints, bounds=bounds, options={
+        'maxiter': 1000
+    })
 
     return result.x.round(3)
 
@@ -216,10 +230,9 @@ def run(
     ])
     efficient_frontier = draw_efficient_frontier(stocks, read_history_records)
     optimal_portfolio = find_optimal_portfolio(stocks, read_history_records)
-    covariance_matrix = np.cov(returns_matrix)
 
-    print(optimal_portfolio.round(3))
-    print(np.sum(optimal_portfolio.round(3)))
+    print(f'Optimal Portfolio {optimal_portfolio}')
+    covariance_matrix = np.cov(returns_matrix)
 
     expected_returns = [stock.expected_return for stock in stocks]
     
@@ -228,17 +241,11 @@ def run(
 
     risk_free_rate = 0.043
 
-
-    def cal(weights):
-        risky_sd = np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
-        portfolio_sd = np.dot(risky_sd, weights)
-        risky_return = np.dot(expected_returns, weights)
-        beta = (risky_return - risk_free_rate) / risky_sd
-        return risk_free_rate + beta * portfolio_sd
-
     # plt.figure(figsize=(10, 7))
     # plt.plot(efficient_frontier[0], efficient_frontier[1], color="r")
-    plt.plot(p_sd, p_return, 'o', color="black")
+    # plt.plot(0, 0.043, 'o', color="black")
+    plt.plot(p_sd, p_return, color="black")
+    plt.plot([0,p_sd], [0.043, p_return], color="black")
     plt.grid(True)
     plt.xlabel('sd')
     plt.ylabel('Expected Return')
