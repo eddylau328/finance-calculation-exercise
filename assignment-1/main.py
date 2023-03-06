@@ -6,6 +6,9 @@ import pandas as pd
 from common import Stock, StockRecord
 import part1
 import part2
+import part2_alt
+import part2_ii
+import part3
 
 
 STOCK_DATA_FILE_PATH = './assignment 1 stock data.xlsx'
@@ -13,10 +16,11 @@ EXPECTED_RETURN_SHEET_NAME = 'Consensus Expected return'
 STOCK_PRICE_SHEET_NAME = 'stock prices'
 
 
-def setup() -> Tuple[List[Stock], Callable[[int], List[StockRecord]]]:
+def setup() -> Tuple[List[Stock], Callable[[int], List[StockRecord]], float]:
 
     def read_stocks() -> List[Stock]:
-        df = pd.read_excel(STOCK_DATA_FILE_PATH, sheet_name=EXPECTED_RETURN_SHEET_NAME)
+        df = pd.read_excel(STOCK_DATA_FILE_PATH,
+                           sheet_name=EXPECTED_RETURN_SHEET_NAME)
         # get 10 stocks from the sheet
         # sheet does not have named columns
         return [
@@ -46,12 +50,21 @@ def setup() -> Tuple[List[Stock], Callable[[int], List[StockRecord]]]:
             ) for i in range(1, len(df[code]))
         ]
 
+    def read_risk_free_rate() -> float:
+        df = pd.read_excel(STOCK_DATA_FILE_PATH,
+                           sheet_name=EXPECTED_RETURN_SHEET_NAME)
+        risk_free_rate = df['Unnamed: 4'][13]
+        if type(risk_free_rate) != float:
+            raise Exception('risk free rate is not defined')
+        return risk_free_rate
+
     stocks = read_stocks()
-    return stocks, read_history_records 
+    risk_free_rate = read_risk_free_rate()
+    return stocks, read_history_records, risk_free_rate
 
 
 def main(parts: List[str]):
-    stocks, read_history_records = setup()
+    stocks, read_history_records, risk_free_rate = setup()
 
     if 'part1' in parts:
         print("Part 1")
@@ -66,13 +79,35 @@ def main(parts: List[str]):
         part2.run(
             stocks,
             read_history_records,
+            risk_free_rate,
+        )
+        part2_alt.run(
+            stocks,
+            read_history_records,
+            risk_free_rate,
         )
         print()
-    
+
+    if 'part2_ii' in parts:
+        part2_ii.run(
+            stocks,
+            read_history_records,
+            risk_free_rate,
+        )
+        print()
+
+    if 'part3' in parts:
+        part3.run(
+            stocks,
+            read_history_records,
+            risk_free_rate,
+        )
+        print()
+
 
 if __name__ == '__main__':
-    run_parts = ['part1', 'part2', 'part3']
-    parser = argparse.ArgumentParser(description = 'CMSC5718 Assignment 1')
+    run_parts = ['part1', 'part2', 'part2_ii', 'part3']
+    parser = argparse.ArgumentParser(description='CMSC5718 Assignment 1')
     parser.add_argument('part_arg', type=str, default=run_parts, nargs='*',
                         help=f'An optional string for running specific parts, i.e. {run_parts}')
     args = parser.parse_args()

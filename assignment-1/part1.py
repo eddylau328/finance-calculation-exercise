@@ -4,10 +4,11 @@ import numpy as np
 
 from common import Stock, StockRecord
 
+
 def calculate_stock_price_returns(stock_records: List[StockRecord]) -> np.ndarray:
     if len(stock_records) <= 1:
         raise Exception(f'Stock records size too small {len(stock_records)}')
-    
+
     prices = np.array([record.price for record in stock_records])
     return prices[1:] / prices[0:-1] - 1
 
@@ -31,9 +32,7 @@ def calculate_annualized_standard_deviation(
 
     """
     returns = calculate_stock_price_returns(stock_records)
-    avg_return = np.average(returns)
-    n = len(stock_records) - 1
-    sd = np.sqrt(np.sum(np.power(returns - avg_return, 2) / (n-1)))
+    sd = np.std(returns)
     sd_annual = sd * np.sqrt(252)
     return np.round(sd_annual, 5)
 
@@ -52,13 +51,9 @@ def calculate_annualized_covariance(
     annualized_covariance = nΣi=1 [(R_a_i - avg_R_a)(R_b_i - avg_R_b)] * 252 / (n - 1)
     """
     a_returns = calculate_stock_price_returns(a_stock_records)
-    a_avg_return = np.average(a_returns)
     b_returns = calculate_stock_price_returns(b_stock_records)
-    b_avg_return = np.average(b_returns)
-    n = len(a_stock_records) - 1
-    return (
-        np.sum((a_returns - a_avg_return) * (b_returns - b_avg_return)) * 252 / (n - 1)
-    )
+    covariance = np.cov(a_returns, b_returns)[0][1]
+    return covariance * 252
 
 
 def calculate_correlation_coefficient(
@@ -94,8 +89,9 @@ def run(
     print()
 
     print('Annualized Covariance')
-    for a_stock in stocks:
-        for b_stock in stocks:
+    cov_matrix = np.zeros((len(stocks), len(stocks)), np.float64)
+    for i, a_stock in enumerate(stocks):
+        for j, b_stock in enumerate(stocks):
             if a_stock.code == b_stock.code:
                 continue
             a_stock_records = read_history_records(a_stock.code)
@@ -104,19 +100,26 @@ def run(
                 a_stock_records,
                 b_stock_records,
             )
-            print(f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_covariance}')
+            cov_matrix[i][j] = np.round(annualized_covariance, 5)
+            print(
+                f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_covariance}')
+    np.savetxt("ann_cov_matrix.csv", cov_matrix, delimiter=",", fmt='%f')
 
     print()
 
     print('Correlation Coefficient')
-    for a_stock in stocks:
-        for b_stock in stocks:
+    corr_matrix = np.zeros((len(stocks), len(stocks)), np.float64)
+    for i, a_stock in enumerate(stocks):
+        for j, b_stock in enumerate(stocks):
             if a_stock.code == b_stock.code:
                 continue
             a_stock_records = read_history_records(a_stock.code)
             b_stock_records = read_history_records(b_stock.code)
-            annualized_covariance = calculate_correlation_coefficient(
+            annualized_correlation = calculate_correlation_coefficient(
                 a_stock_records,
                 b_stock_records,
             )
-            print(f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_covariance}')
+            corr_matrix[i][j] = np.round(annualized_correlation, 5)
+            print(
+                f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_correlation}')
+    np.savetxt("ann_corr_matrix.csv", corr_matrix, delimiter=",", fmt='%f')

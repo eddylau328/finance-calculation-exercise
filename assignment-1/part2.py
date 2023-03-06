@@ -1,37 +1,28 @@
-from typing import Callable, List, Optional
-from functools import reduce
+import itertools
+from typing import Callable, List
 
 import numpy as np
-import matplotlib.pyplot as plt
+import math
 
-from common import Stock, StockRecord, GlobalMinimumVariancePortfolio
-from part1 import (
-    calculate_annualized_standard_deviation,
-    calculate_annualized_covariance,
-)
+from common import Stock, StockRecord
+from part1 import calculate_stock_price_returns, calculate_annualized_standard_deviation, calculate_annualized_covariance
+
+from matplotlib import pyplot as plt
+from scipy.optimize import minimize
+from scipy.ndimage.filters import gaussian_filter1d
 
 
-def calculate_covariance_matrix(
-    stocks: List[Stock],
-    read_history_records: Callable[[int], List[StockRecord]],
-) -> np.ndarray:
-    covariance_matrix = np.zeros((len(stocks), len(stocks)), np.float64)
-    for i, stocks_a in enumerate(stocks):
-        for j, stocks_b in enumerate(stocks):
-            covariance_matrix[i][j] = calculate_annualized_covariance(
-                read_history_records(stocks_a.code),
-                read_history_records(stocks_b.code),
-            )
-    return covariance_matrix
+def generate_dirichlet_sets(n, k):
+    alpha = np.ones(k)  # Set alpha parameter to 1
+    sets = np.random.dirichlet(alpha, n)
+    return sets
 
 
 def calculate_portfolio_expected_return(
     weights: List[float],
     stocks: List[Stock],
 ) -> float:
-    expected_returns = np.array([
-        stock.expected_return for stock in stocks
-    ])
+    expected_returns = [stock.expected_return for stock in stocks]
     return np.dot(expected_returns, np.array(weights))
 
 
@@ -39,7 +30,6 @@ def calculate_portfolio_standard_deviation(
     weights: List[float],
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
-    covariance_matrix: Optional[np.ndarray] = None,
 ) -> float:
     """
     result: nΣi((w_i)**2(q_i)**2)+nΣj(nΣk(w_j * w_k * q_jk))
@@ -47,267 +37,335 @@ def calculate_portfolio_standard_deviation(
     use the matrix method sd_p^2 = (w^T)(cov)(w)
     """
     weights = np.array(weights)
-    if type(covariance_matrix) is not np.ndarray:
-        covariance_matrix = calculate_covariance_matrix(
-            stocks,
-            read_history_records,
-        )
-    portfolio_variance = np.dot(weights, covariance_matrix)
-    portfolio_variance = np.dot(portfolio_variance, weights)
-    return np.sqrt(portfolio_variance)
+    returns_matrix = np.array([
+        calculate_stock_price_returns(read_history_records(stock.code))
+        for stock in stocks
+    ])
+    covariance_matrix = np.cov(returns_matrix) * 252
+    return np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
 
 
 def calculate_global_minimum_variance_portfolio(
     stocks: List[Stock],
-    read_history_records: Callable[[int], List[StockRecord]], 
-    covariance_matrix: Optional[np.ndarray] = None,
-) -> GlobalMinimumVariancePortfolio:
-    """
-    Reference: (not all correct)
-    https://faculty.washington.edu/ezivot/econ424/portfolioTheoryMatrix.pdf
+    read_history_records: Callable[[int], List[StockRecord]],
+) -> List[float]:
+    num_assets = len(stocks)
+    expected_returns = [stock.expected_return for stock in stocks]
+    returns_matrix = np.array([
+        calculate_stock_price_returns(read_history_records(stock.code))
+        for stock in stocks
+    ])
+    covariance_matrix = np.cov(returns_matrix) * 252
 
-    Use Lagrange multipliers to solve the problem
+    def objective_function(weights): return np.sqrt(
+        np.dot(weights.T, np.dot(covariance_matrix, weights)))
 
-    sd_p^2 = nΣi=1(w_i^2 * sd_i^2) + nΣi=1(nΣj=1(w_i * w_j * cov_i_j))
-    
-    1 constraints:
-    sum_of_weights = nΣi=1(w_i) = 1
+    bounds = [(-1, 1) for _ in range(len(stocks))]
 
-    Introduce Lagrange multipliers, with λ
+    def equality_constraint(weights): return np.sum(weights) - 1
+    # inequality_constraint = lambda weights: weights
 
-    L = sd_p^2 - λ * (nΣi=1(w_i) - 1)
+    constraints = [
+        {'type': 'eq', 'fun': equality_constraint},
+    ]
 
-    Differentiating L w.r.t. to each w_i:
+    initial_weights = np.random.uniform(low=-0, high=1, size=10)
+    initial_weights = initial_weights/np.sum(initial_weights)
 
-    ∂L/∂w_i = 0, i = 1 ... N
-      ∂L/∂λ = 0
-
-    Resulting to N + 1 equations:
-
-    [ 2Σ 1 ] [ w ]  = [ 0 ]
-    [ 1  0 ] [ λ ]    [ 1 ]
-
-    [ w ] = [ 2Σ 1 ]^-1 [ 0 ]
-    [ λ ]   [ 1  0 ]    [ 1 ]
-
-    w = [w_1 w_2 ... w_n]
-    Σ = covariance matrix
-
-    """
-    if type(covariance_matrix) is not np.ndarray:
-        covariance_matrix = calculate_covariance_matrix(stocks, read_history_records)
-
-    linear_matrix = np.hstack((2 * covariance_matrix, np.ones((len(stocks), 1), np.float64)))
-    linear_matrix = np.vstack((linear_matrix, np.ones(len(stocks)+1, np.float64)))
-    linear_matrix[len(stocks)][len(stocks)] = 0
-    linear_matrix_inv = np.linalg.inv(linear_matrix)
-    linear_matrix_ans = np.append(np.zeros(len(stocks), np.float64), 1.0)
-    minimum_weights = np.dot(linear_matrix_inv, linear_matrix_ans)[0:10]
-    minimum_expected_return = calculate_portfolio_expected_return(
-        list(minimum_weights),
-        stocks,
-    )
-    minimum_variance = reduce(np.dot, [minimum_weights, covariance_matrix, minimum_weights])
-    return GlobalMinimumVariancePortfolio(
-        standard_deviation=np.sqrt(minimum_variance),
-        variance=minimum_variance,
-        expected_return=minimum_expected_return,
-        weights=list(minimum_weights),
+    result = minimize(
+        objective_function,
+        initial_weights,
+        method='SLSQP',
+        bounds=bounds,
+        constraints=constraints,
     )
 
-def calculate_efficient_frontier(
+    optimal_sd = objective_function(result.x)
+    print(f'Optimal SD {optimal_sd}')
+    print(f'Optimal Weights {result.x.round(3)}')
+    print(f'Expected Return {np.dot(expected_returns, np.array(result.x))}')
+
+
+def draw_efficient_frontier(
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
-    covariance_matrix: Optional[np.ndarray] = None,
+) -> List[float]:
+    num_assets = len(stocks)
+    expected_returns = [stock.expected_return for stock in stocks]
+
+    returns_matrix = np.array([
+        calculate_stock_price_returns(read_history_records(stock.code))
+        for stock in stocks
+    ])
+    covariance_matrix = np.cov(returns_matrix) * 252
+    def objective_function(weights): return np.sqrt(
+        np.dot(weights.T, np.dot(covariance_matrix, weights)))
+
+    num_assets = len(stocks)
+    num_portfolios = 10000
+
+    p_weights = np.zeros((num_portfolios, num_assets))
+    p_return = np.zeros(num_portfolios)
+    p_sd = np.zeros(num_portfolios)
+
+    weights_sets = generate_dirichlet_sets(num_portfolios, num_assets)
+
+    for idx in range(num_portfolios):
+        # weights =  np.random.uniform(low=0, high=1, size=10)
+        # weights = weights/np.sum(weights)
+        weights = weights_sets[idx]
+        # Returns are the product of individual expected returns of asset and its
+        returns = np.dot(weights, expected_returns)
+        sd = objective_function(weights)
+
+        p_weights[idx] = np.array(weights)
+        p_return[idx] = returns
+        p_sd[idx] = sd
+
+    # -- Skip over dominated portfolios
+    dominated_weights = []
+    dominated_returns = []
+    dominated_sd = []
+
+    for i in range(num_portfolios):
+        dominated = False
+        for j in range(num_portfolios):
+            if i != j:
+                if p_return[j] - p_return[i] > 0 and p_sd[i] - p_sd[j] > 0:
+                    dominated = True
+                    break
+        if not dominated:
+            dominated_weights.append(p_weights[i])
+            dominated_returns.append(p_return[i])
+            dominated_sd.append(p_sd[i])
+
+    # create a list of tuples pairing each dominated return with its corresponding dominated standard deviation
+    dominated_data = list(
+        zip(dominated_returns, dominated_sd, dominated_weights))
+
+    # sort the dominated data by the second element of each tuple (i.e., by the standard deviation)
+    sorted_dominated_data = sorted(dominated_data, key=lambda x: x[1])
+
+    # extract the sorted returns and standard deviations into separate lists
+    sorted_dominated_returns = [data[0] for data in sorted_dominated_data]
+    sorted_dominated_sd = [data[1] for data in sorted_dominated_data]
+    sorted_dominated_weights = [data[2] for data in sorted_dominated_data]
+
+    dominated_returns = sorted_dominated_returns
+    dominated_sd = sorted_dominated_sd
+
+    smoothed_dominated_sd = gaussian_filter1d(dominated_sd, sigma=3)
+    smoothed_dominated_returns = gaussian_filter1d(dominated_returns, sigma=3)
+
+    # plot
+    plt.figure(figsize=(10, 7))
+    plt.scatter(p_sd, p_return, c=p_return/p_sd, marker='.', s=5)
+    plt.plot(smoothed_dominated_sd, smoothed_dominated_returns, color="r")
+    plt.grid(True)
+    plt.xlabel('sd')
+    plt.ylabel('Expected Return')
+    plt.colorbar(label='Sharpe Ratio')
+
+    # plt.show()
+
+    return smoothed_dominated_sd, smoothed_dominated_returns, sorted_dominated_weights
+
+
+def find_optimal_portfolio(
+    stocks: List[Stock],
+    read_history_records: Callable[[int], List[StockRecord]],
+    risk_free_rate: float,
 ):
+
+    returns_matrix = np.array([
+        calculate_stock_price_returns(read_history_records(stock.code))
+        for stock in stocks
+    ])
+
+    expected_returns = [stock.expected_return for stock in stocks]
+
+    covariance_matrix = np.cov(returns_matrix) * 252
+
+    def objective_function(weights):
+        portfolio_return = np.dot(weights, expected_returns)
+        portfolio_sd = np.sqrt(
+            np.dot(weights.T, np.dot(covariance_matrix, weights)))
+        sharpe_ratio = (portfolio_return - risk_free_rate) / portfolio_sd
+        return -sharpe_ratio
+
+    constraints = [
+        {'type': 'ineq', 'fun': lambda weight: weight},
+        {'type': 'eq', 'fun': lambda weight: np.sum(weight) - 1}
+    ]
+
+    bounds = [(0, 1) for _ in range(len(stocks))]
+
+    initial_weights = np.random.uniform(low=0, high=1, size=10)
+
+    result = minimize(objective_function, initial_weights, method='SLSQP', constraints=constraints, bounds=bounds, options={
+        'maxiter': 1000
+    })
+
+    return result.x.round(3)
+
+
+def find_updated_optimal_portfolio(
+    stocks: List[Stock],
+    read_history_records: Callable[[int], List[StockRecord]],
+):
+    risk_free_rate = 0.043
+
+    returns_matrix = np.array([
+        calculate_stock_price_returns(read_history_records(stock.code))
+        for stock in stocks
+    ])
+
+    expected_returns = [
+        stock.analyst_update_expected_return for stock in stocks]
+
+    covariance_matrix = np.cov(returns_matrix)
+
+    def objective_function(weights):
+        portfolio_return = np.dot(weights, expected_returns)
+        portfolio_sd = np.sqrt(
+            np.dot(weights.T, np.dot(covariance_matrix, weights)))
+        sharpe_ratio = (portfolio_return - risk_free_rate) / portfolio_sd
+        return -sharpe_ratio
+
+    constraints = [
+        {'type': 'ineq', 'fun': lambda weight: weight},
+        {'type': 'eq', 'fun': lambda weight: np.sum(weight) - 1}
+    ]
+
+    bounds = [(0, 1) for _ in range(len(stocks))]
+
+    initial_weights = np.random.uniform(low=0, high=1, size=10)
+
+    result = minimize(objective_function, initial_weights, method='SLSQP', constraints=constraints, bounds=bounds, options={
+        'maxiter': 1000
+    })
+
+    return result.x.round(3)
+
+
+def print_2_ii_a_get_erc_marginal_risk_contribution(weights,
+                                                    stocks: List[Stock],
+                                                    portfolio_standard_deviation,
+                                                    read_history_records):
     """
-    Reference: (not all correct)
-    https://faculty.washington.edu/ezivot/econ424/portfolioTheoryMatrix.pdf
-
-    Use Lagrange multipliers to solve the problem
-
-    sd_p^2 = nΣi=1(w_i^2 * sd_i^2) + nΣi=1(nΣj=1(w_i * w_j * cov_i_j))
-    
-    1 constraints:
-    r_p = nΣi=1(w_i * r_i)
-
-    Introduce Lagrange multipliers, with λ
-
-    L = sd_p^2 + λ_1 * (nΣi=1(w_i * r_i) - r_p) + λ_2 * (nΣi=1(w_i) - 1)
-
-    Differentiating L w.r.t. to each w_i:
-
-    ∂L/∂w_i = 0, i = 1 ... N
-      ∂L/∂λ = 0
-
-    Resulting to N + 1 equations:
-
-    [ 2Σ r  1 ] [  w  ]    [  0  ]
-    [ r  0  0 ] [ λ_1 ]  = [ r_p ]
-    [ 1  0  0 ] [ λ_2 ]    [  1  ]
-
-    [  w  ]   [ 2Σ r  1 ]^-1 [  0  ]
-    [ λ_1 ] = [ r  0  0 ]    [ r_p ]
-    [ λ_2 ]   [ 1  0  0 ]    [  1  ]
-
-    w = [w_1 w_2 ... w_n]
-    Σ = covariance matrix
-    r = expected returns
-
+        mr_i = ((wi*q_i**2)+(Σk<>i(wk*q_ik)))/q_p
     """
-    N = len(stocks)
-    if type(covariance_matrix) is not np.ndarray:
-        covariance_matrix = calculate_covariance_matrix(stocks, read_history_records)
 
-    expected_returns = np.array([stock.expected_return for stock in stocks])
-    linear_matrix = np.hstack((2 * covariance_matrix, np.transpose(np.array([expected_returns])), np.ones((N, 1), np.float64)))
-    linear_matrix = np.vstack((linear_matrix, np.concatenate((expected_returns, np.zeros(2, np.float64)))))
-    linear_matrix = np.vstack((linear_matrix, np.concatenate((np.ones(N, np.float64), np.zeros(2, np.float64)))))
-    linear_matrix_inv = np.linalg.inv(linear_matrix)
+    for i in range(len(stocks)):
+        stock_records_i = read_history_records(stocks[i].code)
+        w_i = weights[i]
+        q_i = calculate_annualized_standard_deviation(stock_records_i)
+        numerator = (w_i * (q_i ** 2))
+        for k in range(len(stocks)):
+            if i != k:
+                stock_records_k = read_history_records(stocks[k].code)
+                q_ik = calculate_annualized_covariance(
+                    stock_records_i,
+                    stock_records_k,
+                )
+                numerator += weights[k] * q_ik
+        mr_i = numerator / portfolio_standard_deviation
+        print("marginal_risk of ", stocks[i].code, ": ", mr_i)
 
-    # weights in linear equation format, w = m * r_p + c
-    # weights store [m, c]
-    weight_linear_equations = np.zeros((N, 2), np.float64)
-    for i in range(N):
-        # index N = pos N + 1
-        # index N + 1 = pos N + 2
-        weight_linear_equations[i][0] = linear_matrix_inv[i][N]
-        weight_linear_equations[i][1] = linear_matrix_inv[i][N+1]
-        
-    """
-    sd_p^2 = nΣi=1(w_i^2 * sd_i^2) + nΣi=1(nΣj=1(w_i * w_j * cov_i_j))
 
-    sd_p^2 = 2 * w_1^2 * cov_1_1 + ... + 2 * w_N^2 * cov_N_N
-             + 2 * w_1 * w_2 * cov_1_2 + ... + 2 * w_N * w_N-1 * cov_N_N-1
+def part_2_ii(
+    returns_matrix
+):
+    cov = np.cov(returns_matrix) * 252
 
-    first part:
-    2 * w_1^2 * cov_1_1
-    = 2 * cov_1_1 * (m_1 * r_p + c_1)^2
-    = 2 * cov_1_1 * (m_1^2 * r_p^2 + 2 * m_1 * c_1 * r_p + c_1^2)
-    = 2 * cov_1_1 * m_1^2 * r_p^2
-      + 4 * cov_1_1 * m_1 * c_1 * r_p
-      + 2 * cov_1_1 * c_1^2
+    # Define the portfolio risk function
+    def find_portfolio_risk(w, cov):
+        return np.sqrt(np.dot(w.T, np.dot(cov, w)))
 
-    second part:
-    2 * w_1 * w_2 * cov_1_2
-    = 2 * cov_1_2 * (m_1 * r_p + c_1) * (m_2 * r_p + c_2)
-    = 2 * cov_1_2 * [m_1 * m_2 * r_p^2 + (m_1 * c_2 + m_2 * c_1) * r_p + c_1 * c_2]
-    = 2 * cov_1_2 * m_1 * m_2 * r_p^2
-      + 2 * cov_1_2 * (m_1 * c_2 + m_2 * c_1) * r_p
-      + 2 * cov_1_2 * c_1 * c_2
+    # Define the risk contribution function
+    def find_risk_contribution(w, cov):
+        portfolio_variance = np.dot(w.T, np.dot(cov, w))
+        return np.multiply(w, np.dot(cov, w)) / portfolio_variance
 
-    Combine:
-    sd_p^2 = A * r_p^2 + B * r_p + C
-    """
-    A, B, C = 0, 0, 0
-    for i in range(N):
-        # first part
-        A += 2 * covariance_matrix[i][i] * weight_linear_equations[i][0]**2
-        B += 4 * covariance_matrix[i][i] * weight_linear_equations[i][0] * weight_linear_equations[i][1]
-        C += 2 * covariance_matrix[i][i] * weight_linear_equations[i][1]**2
-        # second part
-        for j in range(N):
-            if i == j:
-                continue
-            sub_part_a = 1
-            sub_part_a *= 2 * covariance_matrix[i][j]
-            sub_part_a *= weight_linear_equations[i][0]
-            sub_part_a *= weight_linear_equations[j][0]
-            A += sub_part_a
-            sub_part_b = 1
-            sub_part_b *= 2 * covariance_matrix[i][j]
-            sub_part_b *= (
-                weight_linear_equations[i][0] * weight_linear_equations[j][1] +
-                weight_linear_equations[j][0] * weight_linear_equations[i][1]
-            )
-            B += sub_part_b
-            sub_part_c = 1
-            sub_part_c *= 2 * covariance_matrix[i][j]
-            sub_part_c *= weight_linear_equations[i][1]
-            sub_part_c *= weight_linear_equations[j][1]
-            C += sub_part_c
+    # Define the objective function for the SQP optimizer
+    def objective_function(w, cov):
+        portfolio_risk = find_portfolio_risk(w, cov)
+        risk_contribution = find_risk_contribution(w, cov)
+        erc = np.ones_like(risk_contribution) / len(risk_contribution)
+        return np.sum(np.square(risk_contribution - erc)) + np.square(portfolio_risk)
 
-    print(f'sd_p^2 = {A} * r_p^2 + {B} * r_p + {C}')
-    r_p = np.linspace(
-        np.min(expected_returns),
-        np.max(expected_returns),
-        1000,
-    )
-    sd_p = np.sqrt(1/2*(A * r_p**2 + B * r_p + C))
+    # Define the constraints
+    constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0}]
 
-    portfolio = calculate_global_minimum_variance_portfolio(stocks, read_history_records)
+    # Define the bounds
+    bounds = [(0.0, 1.0) for i in range(len(cov))]
 
-    test_data_sizes = 100000
-    test_weights = np.random.rand(test_data_sizes, len(stocks))
-    test_weights = test_weights / test_weights.sum(axis=1)[:, np.newaxis]
+    # Define the initial weights
+    w = np.ones(len(cov)) / len(cov)
 
-    # sd_p^2 = nΣi=1(w_i^2 * sd_i^2) + nΣi=1(nΣj=1(w_i * w_j * cov_i_j))
-    test_sd_p = np.zeros(test_data_sizes, np.float64)
-    for k in range(test_data_sizes):
-        for i in range(len(stocks)):
-            for j in range(len(stocks)):
-                test_sd_p[k] += test_weights[k][i] * test_weights[k][j] * covariance_matrix[i][j]
+    # Define the covariance matrix
 
-    test_sd_p += np.dot(test_weights**2, np.diag(covariance_matrix))
-    test_sd_p = np.sqrt(test_sd_p)
-    #  avg_r_p = nΣi=1(w_i * avg_r_i)
-    test_r_p = np.dot(test_weights, expected_returns) 
+    # Run the SQP optimizer
+    result = minimize(objective_function, w, args=(cov), method='SLSQP',
+                      bounds=bounds, constraints=constraints, options={'maxiter': 1000})
 
-    plt.scatter(
-        test_sd_p,
-        test_r_p,
-        color='blue',
-        s=2,
-    )
-    plt.scatter(
-        [portfolio.standard_deviation],
-        [portfolio.expected_return],
-        color='red',
-        s=4,
-    )
-    plt.plot(sd_p, r_p)
-    plt.xlabel("Portfolio Standard Deviation")
-    plt.ylabel("Portfolio Return")
-    plt.show()
+    print('equal risk portfolio', result.x.round(3))
 
 
 def run(
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
+    risk_free_rate: float,
 ):
     weights = [0.1] * len(stocks)
 
-    covariance_matrix = calculate_covariance_matrix(
+    portfolio_expected_return = calculate_portfolio_expected_return(
+        weights,
+        stocks
+    )
+    portfolio_standard_deviation = calculate_portfolio_standard_deviation(
+        weights,
         stocks,
         read_history_records,
     )
 
-    # portfolio_expected_return = calculate_portfolio_expected_return(
-    #     weights,
-    #     stocks,
-    # )
-    # portfolio_standard_deviation = calculate_portfolio_standard_deviation(
-    #     weights,
-    #     stocks,
-    #     read_history_records,
-    #     covariance_matrix,
-    # )
-    # print(f'Expected Return of EW    {portfolio_expected_return}')
-    # print(f'Standard Deviation of EW {portfolio_standard_deviation}')
+    print(f'Expected Return of EW    {portfolio_expected_return}')
+    print(f'Standard Deviation of EW {portfolio_standard_deviation}')
 
-    # print()
+    # calculate_global_minimum_variance_portfolio(stocks, read_history_records)
+    # returns_matrix = np.array([
+    #     calculate_stock_price_returns(read_history_records(stock.code))
+    #     for stock in stocks
+    # ])
 
-    # global_mv_portfolio = calculate_global_minimum_variance_portfolio(
+    # part_2_ii(returns_matrix)
+    # efficient_frontier = draw_efficient_frontier(stocks, read_history_records)
+    # optimal_portfolio = find_optimal_portfolio(
     #     stocks,
     #     read_history_records,
-    #     covariance_matrix,
+    #     risk_free_rate,
     # )
-    # print('Global minimum variance portfolio')
-    # print(f'Portfolio variance           {global_mv_portfolio.variance}')
-    # print(f'Portfolio standard deviation {global_mv_portfolio.standard_deviation}')
-    # print(f'Portfolio expected return    {global_mv_portfolio.expected_return}')
-    # print('Portfolio weights:')
-    # for i, stock in enumerate(stocks):
-    #     print(f'Stock {stock.code:>5} weight = {global_mv_portfolio.weights[i]}')
 
-    calculate_efficient_frontier(stocks, read_history_records, covariance_matrix)
+    # print(f'Optimal Portfolio {optimal_portfolio}')
+    # covariance_matrix = np.cov(returns_matrix) * 252
+
+    # expected_returns = [stock.expected_return for stock in stocks]
+
+    # updated_optimal_portfolio = find_updated_optimal_portfolio(stocks, read_history_records)
+    # print(f'Updated Optimal Portfolio {updated_optimal_portfolio}')
+
+    # p_sd = np.sqrt(np.dot(optimal_portfolio.T, np.dot(covariance_matrix, optimal_portfolio)))
+    # p_return = np.dot(optimal_portfolio, expected_returns)
+
+    # risk_free_rate = 0.043
+
+    # # plt.figure(figsize=(10, 7))
+    # # plt.plot(efficient_frontier[0], efficient_frontier[1], color="r")
+    # # plt.plot(0, 0.043, 'o', color="black")
+    # plt.plot(p_sd, p_return, color="black")
+    # plt.plot([0, p_sd], [0.043, p_return], color="black")
+    # plt.grid(True)
+    # plt.xlabel('sd')
+    # plt.ylabel('Expected Return')
+
+    # plt.show()
