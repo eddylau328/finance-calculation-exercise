@@ -273,6 +273,45 @@ def print_2_ii_a_get_erc_marginal_risk_contribution(weights,
         print("marginal_risk of ", stocks[i].code, ": ", mr_i)
 
 
+def part_2_ii(
+    returns_matrix
+):
+    cov = np.cov(returns_matrix) * 252
+
+    # Define the portfolio risk function
+    def find_portfolio_risk(w, cov):
+        return np.sqrt(np.dot(w.T, np.dot(cov, w)))
+
+    # Define the risk contribution function
+    def find_risk_contribution(w, cov):
+        portfolio_variance = np.dot(w.T, np.dot(cov, w))
+        return np.multiply(w, np.dot(cov, w)) / portfolio_variance
+
+    # Define the objective function for the SQP optimizer
+    def objective_function(w, cov):
+        portfolio_risk = find_portfolio_risk(w, cov)
+        risk_contribution = find_risk_contribution(w, cov)
+        erc = np.ones_like(risk_contribution) / len(risk_contribution)
+        return np.sum(np.square(risk_contribution - erc)) + np.square(portfolio_risk)
+
+    # Define the constraints
+    constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0}]
+
+    # Define the bounds
+    bounds = [(0.0, 1.0) for i in range(len(cov))]
+
+    # Define the initial weights
+    w = np.ones(len(cov)) / len(cov)
+
+    # Define the covariance matrix
+
+    # Run the SQP optimizer
+    result = minimize(objective_function, w, args=(cov), method='SLSQP',
+                      bounds=bounds, constraints=constraints, options={'maxiter': 1000})
+
+    print('equal risk portfolio', result.x.round(3))
+
+
 def run(
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
@@ -298,6 +337,8 @@ def run(
     #     calculate_stock_price_returns(read_history_records(stock.code))
     #     for stock in stocks
     # ])
+
+    # part_2_ii(returns_matrix)
     # efficient_frontier = draw_efficient_frontier(stocks, read_history_records)
     # optimal_portfolio = find_optimal_portfolio(
     #     stocks,
