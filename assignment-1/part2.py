@@ -208,6 +208,65 @@ def find_optimal_portfolio(
 
     return result.x.round(3)
 
+def find_updated_optimal_portfolio(
+    stocks: List[Stock],
+    read_history_records: Callable[[int], List[StockRecord]],
+): 
+    risk_free_rate = 0.043
+    
+    returns_matrix = np.array([
+        calculate_stock_price_returns(read_history_records(stock.code))
+        for stock in stocks
+    ])
+
+    expected_returns = [stock.analyst_update_expected_return for stock in stocks]
+
+    covariance_matrix = np.cov(returns_matrix)
+
+    def objective_function(weights):
+        portfolio_return = np.dot(weights, expected_returns)
+        portfolio_sd = np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
+        sharpe_ratio = (portfolio_return - risk_free_rate) / portfolio_sd
+        return -sharpe_ratio
+
+    constraints = [
+        {'type': 'ineq', 'fun': lambda weight: weight},
+        {'type': 'eq', 'fun': lambda weight: np.sum(weight) - 1}
+    ]
+
+    bounds = [(0, 1) for _ in range(len(stocks))]
+
+    initial_weights =  np.random.uniform(low=0, high=1, size=10)
+
+    result = minimize(objective_function, initial_weights, method='SLSQP', constraints=constraints, bounds=bounds, options={
+        'maxiter': 1000
+    })
+
+    return result.x.round(3)
+
+def print_2_ii_a_get_erc_marginal_risk_contribution(weights,
+                                                    stocks: List[Stock],
+                                                    portfolio_standard_deviation,
+                                                    read_history_records):
+    """
+        mr_i = ((wi*q_i**2)+(Σk<>i(wk*q_ik)))/q_p
+    """
+
+    for i in range(len(stocks)):
+        stock_records_i = read_history_records(stocks[i].code)
+        w_i = weights[i]
+        q_i = calculate_annualized_standard_deviation(stock_records_i)
+        numerator = (w_i * (q_i ** 2))
+        for k in range(len(stocks)):
+            if i != k:
+                stock_records_k = read_history_records(stocks[k].code)
+                q_ik = calculate_annualized_covariance(
+                    stock_records_i,
+                    stock_records_k,
+                )
+                numerator += weights[k] * q_ik
+        mr_i = numerator / portfolio_standard_deviation
+        print("marginal_risk of ", stocks[i].code, ": ", mr_i)
 
 def run(
     stocks: List[Stock],
@@ -245,9 +304,11 @@ def run(
     covariance_matrix = np.cov(returns_matrix)
 
     expected_returns = [stock.expected_return for stock in stocks]
-
-    p_sd = np.sqrt(np.dot(optimal_portfolio.T, np.dot(
-        covariance_matrix, optimal_portfolio)))
+    
+    updated_optimal_portfolio = find_updated_optimal_portfolio(stocks, read_history_records)
+    print(f'Updated Optimal Portfolio {updated_optimal_portfolio}')
+    
+    p_sd = np.sqrt(np.dot(optimal_portfolio.T, np.dot(covariance_matrix, optimal_portfolio)))
     p_return = np.dot(optimal_portfolio, expected_returns)
 
     risk_free_rate = 0.043
