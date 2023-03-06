@@ -7,6 +7,7 @@ from common import Stock, StockRecord
 import part1
 import part2
 import part2_alt
+import part2_ii
 
 
 STOCK_DATA_FILE_PATH = './assignment 1 stock data.xlsx'
@@ -86,9 +87,17 @@ def main(parts: List[str]):
         )
         print()
 
+    if 'part2_ii' in parts:
+        part2_ii.run(
+            stocks,
+            read_history_records,
+            risk_free_rate,
+        )
+        print()
+
 
 if __name__ == '__main__':
-    run_parts = ['part1', 'part2', 'part3']
+    run_parts = ['part1', 'part2', 'part2_ii', 'part3']
     parser = argparse.ArgumentParser(description='CMSC5718 Assignment 1')
     parser.add_argument('part_arg', type=str, default=run_parts, nargs='*',
                         help=f'An optional string for running specific parts, i.e. {run_parts}')
