@@ -6,6 +6,7 @@ import pandas as pd
 from common import Stock, StockRecord
 import part1
 import part2
+import part2_alt
 
 
 STOCK_DATA_FILE_PATH = './assignment 1 stock data.xlsx'
@@ -74,6 +75,11 @@ def main(parts: List[str]):
     if 'part2' in parts:
         print("Part 2")
         part2.run(
+            stocks,
+            read_history_records,
+            risk_free_rate,
+        )
+        part2_alt.run(
             stocks,
             read_history_records,
             risk_free_rate,

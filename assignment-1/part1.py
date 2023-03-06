@@ -4,10 +4,11 @@ import numpy as np
 
 from common import Stock, StockRecord
 
+
 def calculate_stock_price_returns(stock_records: List[StockRecord]) -> np.ndarray:
     if len(stock_records) <= 1:
         raise Exception(f'Stock records size too small {len(stock_records)}')
-    
+
     prices = np.array([record.price for record in stock_records])
     return prices[1:] / prices[0:-1] - 1
 
@@ -88,8 +89,9 @@ def run(
     print()
 
     print('Annualized Covariance')
-    for a_stock in stocks:
-        for b_stock in stocks:
+    cov_matrix = np.zeros((len(stocks), len(stocks)), np.float64)
+    for i, a_stock in enumerate(stocks):
+        for j, b_stock in enumerate(stocks):
             if a_stock.code == b_stock.code:
                 continue
             a_stock_records = read_history_records(a_stock.code)
@@ -98,19 +100,26 @@ def run(
                 a_stock_records,
                 b_stock_records,
             )
-            print(f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_covariance}')
+            cov_matrix[i][j] = np.round(annualized_covariance, 3)
+            print(
+                f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_covariance}')
+    np.savetxt("ann_cov_matrix.csv", cov_matrix, delimiter=",", fmt='%f')
 
     print()
 
     print('Correlation Coefficient')
+    corr_matrix = np.zeros((len(stocks), len(stocks)), np.float64)
     for a_stock in stocks:
         for b_stock in stocks:
             if a_stock.code == b_stock.code:
                 continue
             a_stock_records = read_history_records(a_stock.code)
             b_stock_records = read_history_records(b_stock.code)
-            annualized_covariance = calculate_correlation_coefficient(
+            annualized_correlation = calculate_correlation_coefficient(
                 a_stock_records,
                 b_stock_records,
             )
-            print(f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_covariance}')
+            corr_matrix[i][j] = np.round(annualized_correlation, 3)
+            print(
+                f'Stock {a_stock.code:>4} vs {b_stock.code:<5} {annualized_correlation}')
+    np.savetxt("ann_corr_matrix.csv", corr_matrix, delimiter=",", fmt='%f')
