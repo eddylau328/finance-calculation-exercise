@@ -31,9 +31,7 @@ def calculate_annualized_standard_deviation(
 
     """
     returns = calculate_stock_price_returns(stock_records)
-    avg_return = np.average(returns)
-    n = len(stock_records) - 1
-    sd = np.sqrt(np.sum(np.power(returns - avg_return, 2) / (n-1)))
+    sd = np.std(returns)
     sd_annual = sd * np.sqrt(252)
     return np.round(sd_annual, 5)
 
@@ -52,13 +50,9 @@ def calculate_annualized_covariance(
     annualized_covariance = nΣi=1 [(R_a_i - avg_R_a)(R_b_i - avg_R_b)] * 252 / (n - 1)
     """
     a_returns = calculate_stock_price_returns(a_stock_records)
-    a_avg_return = np.average(a_returns)
     b_returns = calculate_stock_price_returns(b_stock_records)
-    b_avg_return = np.average(b_returns)
-    n = len(a_stock_records) - 1
-    return (
-        np.sum((a_returns - a_avg_return) * (b_returns - b_avg_return)) * 252 / (n - 1)
-    )
+    covariance = np.cov(a_returns, b_returns)[0][1]
+    return covariance * 252
 
 
 def calculate_correlation_coefficient(
