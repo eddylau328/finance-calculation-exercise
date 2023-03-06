@@ -57,18 +57,19 @@ def calculate_global_minimum_variance_portfolio(
     ])
     covariance_matrix = np.cov(returns_matrix)
 
-    objective_function = lambda weights: np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
+    def objective_function(weights): return np.sqrt(
+        np.dot(weights.T, np.dot(covariance_matrix, weights)))
 
     bounds = [(-1, 1) for _ in range(len(stocks))]
 
-    equality_constraint = lambda weights: np.sum(weights) - 1
+    def equality_constraint(weights): return np.sum(weights) - 1
     # inequality_constraint = lambda weights: weights
 
     constraints = [
         {'type': 'eq', 'fun': equality_constraint},
     ]
 
-    initial_weights =  np.random.uniform(low=-0, high=1, size=10)
+    initial_weights = np.random.uniform(low=-0, high=1, size=10)
     initial_weights = initial_weights/np.sum(initial_weights)
 
     result = minimize(
@@ -79,7 +80,7 @@ def calculate_global_minimum_variance_portfolio(
         constraints=constraints,
     )
 
-    optimal_sd =  objective_function(result.x)
+    optimal_sd = objective_function(result.x)
     print(f'Optimal SD {optimal_sd}')
     print(f'Optimal Weights {result.x.round(3)}')
     print(f'Expected Return {np.dot(expected_returns, np.array(result.x))}')
@@ -91,13 +92,14 @@ def draw_efficient_frontier(
 ) -> List[float]:
     num_assets = len(stocks)
     expected_returns = [stock.expected_return for stock in stocks]
-    
+
     returns_matrix = np.array([
         calculate_stock_price_returns(read_history_records(stock.code))
         for stock in stocks
     ])
     covariance_matrix = np.cov(returns_matrix)
-    objective_function = lambda weights: np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
+    def objective_function(weights): return np.sqrt(
+        np.dot(weights.T, np.dot(covariance_matrix, weights)))
 
     num_assets = len(stocks)
     num_portfolios = 10000
@@ -112,20 +114,20 @@ def draw_efficient_frontier(
         # weights =  np.random.uniform(low=0, high=1, size=10)
         # weights = weights/np.sum(weights)
         weights = weights_sets[idx]
-        returns = np.dot(weights, expected_returns) # Returns are the product of individual expected returns of asset and its
+        # Returns are the product of individual expected returns of asset and its
+        returns = np.dot(weights, expected_returns)
         sd = objective_function(weights)
 
         p_weights[idx] = np.array(weights)
         p_return[idx] = returns
         p_sd[idx] = sd
 
-    
-    #-- Skip over dominated portfolios
+    # -- Skip over dominated portfolios
     dominated_weights = []
     dominated_returns = []
     dominated_sd = []
 
-    for i in range(num_portfolios) :
+    for i in range(num_portfolios):
         dominated = False
         for j in range(num_portfolios):
             if i != j:
@@ -138,7 +140,8 @@ def draw_efficient_frontier(
             dominated_sd.append(p_sd[i])
 
     # create a list of tuples pairing each dominated return with its corresponding dominated standard deviation
-    dominated_data = list(zip(dominated_returns, dominated_sd, dominated_weights))
+    dominated_data = list(
+        zip(dominated_returns, dominated_sd, dominated_weights))
 
     # sort the dominated data by the second element of each tuple (i.e., by the standard deviation)
     sorted_dominated_data = sorted(dominated_data, key=lambda x: x[1])
@@ -156,7 +159,7 @@ def draw_efficient_frontier(
 
     # plot
     plt.figure(figsize=(10, 7))
-    plt.scatter(p_sd, p_return, c=p_return/p_sd, marker='.', s=5) 
+    plt.scatter(p_sd, p_return, c=p_return/p_sd, marker='.', s=5)
     # plt.plot(smoothed_dominated_sd, smoothed_dominated_returns, color="r")
     plt.grid(True)
     plt.xlabel('sd')
@@ -171,9 +174,9 @@ def draw_efficient_frontier(
 def find_optimal_portfolio(
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
-): 
-    risk_free_rate = 0.043
-    
+    risk_free_rate: float,
+):
+
     returns_matrix = np.array([
         calculate_stock_price_returns(read_history_records(stock.code))
         for stock in stocks
@@ -185,7 +188,8 @@ def find_optimal_portfolio(
 
     def objective_function(weights):
         portfolio_return = np.dot(weights, expected_returns)
-        portfolio_sd = np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
+        portfolio_sd = np.sqrt(
+            np.dot(weights.T, np.dot(covariance_matrix, weights)))
         sharpe_ratio = (portfolio_return - risk_free_rate) / portfolio_sd
         return -sharpe_ratio
 
@@ -196,7 +200,7 @@ def find_optimal_portfolio(
 
     bounds = [(0, 1) for _ in range(len(stocks))]
 
-    initial_weights =  np.random.uniform(low=0, high=1, size=10)
+    initial_weights = np.random.uniform(low=0, high=1, size=10)
 
     result = minimize(objective_function, initial_weights, method='SLSQP', constraints=constraints, bounds=bounds, options={
         'maxiter': 1000
@@ -204,9 +208,11 @@ def find_optimal_portfolio(
 
     return result.x.round(3)
 
+
 def run(
     stocks: List[Stock],
     read_history_records: Callable[[int], List[StockRecord]],
+    risk_free_rate: float,
 ):
     weights = [0.1] * len(stocks)
 
@@ -229,14 +235,19 @@ def run(
         for stock in stocks
     ])
     efficient_frontier = draw_efficient_frontier(stocks, read_history_records)
-    optimal_portfolio = find_optimal_portfolio(stocks, read_history_records)
+    optimal_portfolio = find_optimal_portfolio(
+        stocks,
+        read_history_records,
+        risk_free_rate,
+    )
 
     print(f'Optimal Portfolio {optimal_portfolio}')
     covariance_matrix = np.cov(returns_matrix)
 
     expected_returns = [stock.expected_return for stock in stocks]
-    
-    p_sd = np.sqrt(np.dot(optimal_portfolio.T, np.dot(covariance_matrix, optimal_portfolio)))
+
+    p_sd = np.sqrt(np.dot(optimal_portfolio.T, np.dot(
+        covariance_matrix, optimal_portfolio)))
     p_return = np.dot(optimal_portfolio, expected_returns)
 
     risk_free_rate = 0.043
@@ -245,11 +256,9 @@ def run(
     # plt.plot(efficient_frontier[0], efficient_frontier[1], color="r")
     # plt.plot(0, 0.043, 'o', color="black")
     plt.plot(p_sd, p_return, color="black")
-    plt.plot([0,p_sd], [0.043, p_return], color="black")
+    plt.plot([0, p_sd], [0.043, p_return], color="black")
     plt.grid(True)
     plt.xlabel('sd')
     plt.ylabel('Expected Return')
 
     plt.show()
-
-
