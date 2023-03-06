@@ -9,6 +9,7 @@ import numpy as np
 def part_b(
     stocks,
     read_history_records,
+    no_log=False,
 ):
     returns_matrix = np.array([
         calculate_stock_price_returns(read_history_records(stock.code))
@@ -19,11 +20,14 @@ def part_b(
     ef = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=(-1, 1))
     ef.min_volatility()
     ret_tangent, std_tangent, _ = ef.portfolio_performance()
-    print("global minimum variance portfolio")
-    print(f"standard deviation = {ret_tangent}")
-    print(f"expect return      = {std_tangent}")
-    print("weights")
-    print(ef.weights)
+
+    if not no_log:
+        print("global minimum variance portfolio")
+        print(f"standard deviation = {ret_tangent}")
+        print(f"expect return      = {std_tangent}")
+        print("weights")
+        print(ef.weights)
+    return ef.weights
 
 
 def plot_efficient_frontier(
@@ -58,6 +62,7 @@ def run_efficient_frontier(
     risk_free_rate,
     filename,
     plot_title,
+    no_log=False,
 ):
     ef = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=(0, 1))
     ef1 = EfficientFrontier(expected_returns, cov_matrix, weight_bounds=(0, 1))
@@ -76,11 +81,12 @@ def run_efficient_frontier(
     ef_max_sharpe.max_sharpe()
     ret_tangent, std_tangent, _ = ef_max_sharpe.portfolio_performance()
 
-    print("optimal portfolio")
-    print(f"standard deviation = {std_tangent}")
-    print(f"expected return    = {ret_tangent}")
-    print(f"weights")
-    print(ef_max_sharpe.weights)
+    if not no_log:
+        print("optimal portfolio")
+        print(f"standard deviation = {std_tangent}")
+        print(f"expected return    = {ret_tangent}")
+        print(f"weights")
+        print(ef_max_sharpe.weights)
 
     ax.scatter(std_tangent, ret_tangent, marker="*",
                s=100, c="r", label="Max Sharpe")
@@ -113,15 +119,19 @@ def run_efficient_frontier(
     ax.set_xbound(0)
     ax.set_title(plot_title)
     ax.legend()
-    plt.tight_layout()
-    plt.savefig(filename, dpi=200)
-    plt.show()
+    if not no_log:
+        plt.tight_layout()
+        plt.savefig(filename, dpi=200)
+        plt.show()
+
+    return ef_max_sharpe.weights
 
 
 def part_c_and_d(
     stocks,
     read_history_records,
     risk_free_rate,
+    no_log=False,
 ):
     returns_matrix = np.array([
         calculate_stock_price_returns(read_history_records(stock.code))
@@ -129,13 +139,16 @@ def part_c_and_d(
     ])
     expected_returns = [stock.expected_return for stock in stocks]
     cov_matrix = np.cov(returns_matrix) * 252
-    plot_efficient_frontier(expected_returns, cov_matrix, "ef_scatter_c.png")
-    run_efficient_frontier(
+    if not no_log:
+        plot_efficient_frontier(
+            expected_returns, cov_matrix, "ef_scatter_c.png")
+    return run_efficient_frontier(
         expected_returns,
         cov_matrix,
         risk_free_rate,
         "ef_scatter_d.png",
         "Part D: Efficient Frontier with random portfolios",
+        no_log,
     )
 
 

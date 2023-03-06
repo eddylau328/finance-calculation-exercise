@@ -19,7 +19,8 @@ def print_2_ii_a_get_erc_marginal_risk_contribution(
     weights,
     stocks: List[Stock],
     portfolio_standard_deviation,
-    read_history_records
+    read_history_records,
+    no_log=False,
 ):
     """
         mr_i = ((wi*q_i**2)+(Σk<>i(wk*q_ik)))/q_p
@@ -41,9 +42,10 @@ def print_2_ii_a_get_erc_marginal_risk_contribution(
                 numerator += weights[k] * q_ik
         mr_i = numerator / portfolio_standard_deviation
         tr = w_i * mr_i
-        print(f"marginal risk for {stocks[i].code} = {mr_i}")
-        print(f"total risk from {stocks[i].code}   = {tr}")
-        print()
+        if not no_log:
+            print(f"marginal risk for {stocks[i].code} = {mr_i}")
+            print(f"total risk from {stocks[i].code}   = {tr}")
+            print()
         mr.append(mr_i)
 
     return mr, tr
@@ -107,3 +109,58 @@ def run(
     print(f'Sharp ratio of optimal ERC portfolio = {erc_sharp_ratio}')
     leverage_expect_return = erc_sharp_ratio * ew_sd + risk_free_rate
     print(f'Leverage expect return = {leverage_expect_return}')
+
+
+def run_silent(
+    stocks,
+    read_history_records,
+    risk_free_rate,
+):
+    returns_matrix = pd.DataFrame(np.array([
+        calculate_stock_price_returns(read_history_records(stock.code))
+        for stock in stocks
+    ]).T)
+    port = rp.Portfolio(returns=returns_matrix)
+
+    # port.assets_stats(method_mu='hist', method_cov='hist', d=0.94)
+    # 计算期望收益及方差，当模型model选择Classic时，需使用assets_stats计算组合的期望收益及方差
+    method_mu = 'hist'  # 还支持其他方法，详见文档
+    method_cov = 'hist'  # 还支持其他方法，详见文档
+    port.assets_stats(method_mu=method_mu, method_cov=method_cov)
+
+    w_rp = port.rp_optimization(
+        model="Classic",  # use historical
+        rm="MV",  # use mean-variance optimization
+        hist=True,  # use historical scenarios
+        rf=0,  # set risk free rate to 0
+        b=None  # don't use constraints
+    )
+
+    weights = list(w_rp.values.T[0])
+    mr, tr = print_2_ii_a_get_erc_marginal_risk_contribution(
+        weights,
+        stocks,
+        calculate_portfolio_standard_deviation(
+            weights,
+            stocks,
+            read_history_records
+        ),
+        read_history_records,
+        True,
+    )
+
+    ew_sd = calculate_portfolio_standard_deviation(
+        [0.1] * len(stocks),
+        stocks,
+        read_history_records,
+    )
+    leverage_factor = ew_sd/tr
+
+    erc_expect_return = calculate_portfolio_expected_return(
+        weights,
+        stocks,
+    )
+    erc_sharp_ratio = (erc_expect_return - risk_free_rate) / tr
+    leverage_expect_return = erc_sharp_ratio * ew_sd + risk_free_rate
+
+    return weights, leverage_factor

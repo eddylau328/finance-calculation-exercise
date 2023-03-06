@@ -8,6 +8,7 @@ import part1
 import part2
 import part2_alt
 import part2_ii
+import part3
 
 
 STOCK_DATA_FILE_PATH = './assignment 1 stock data.xlsx'
@@ -89,6 +90,14 @@ def main(parts: List[str]):
 
     if 'part2_ii' in parts:
         part2_ii.run(
+            stocks,
+            read_history_records,
+            risk_free_rate,
+        )
+        print()
+
+    if 'part3' in parts:
+        part3.run(
             stocks,
             read_history_records,
             risk_free_rate,
