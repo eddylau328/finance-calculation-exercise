@@ -60,6 +60,11 @@ def run(
                 ] = data[column_name].values[2:].astype(np.float64)
 
     initial_capital = 1000000.0
+    data = columns['^HSI']
+    hsi_percentage_change = (data[data.shape[0]-1] - data[0]) / data[0]
+    print()
+    print(f'HSI percentage change = {hsi_percentage_change}')
+    print()
 
     # part 2 i a
     print('Part 2 i a')
