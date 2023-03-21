@@ -33,7 +33,10 @@ def calculate_correlation_coefficient(
     stock_1_diff = stock_1_log_returns - np.mean(stock_1_log_returns)
     stock_2_diff = stock_2_log_returns - np.mean(stock_2_log_returns)
     n = len(stock_1_prices)
-    return np.sum(np.multiply(stock_1_diff, stock_2_diff)) * 252 / (n - 1)
+    std_1_1 = calculate_realized_volatility(stock_1_prices) 
+    std_2_2 = calculate_realized_volatility(stock_2_prices) 
+    covar_1_2 = np.sum(np.multiply(stock_1_diff, stock_2_diff)) * 252 / (n - 1)
+    return covar_1_2 / (std_1_1 * std_2_2)
 
 
 def part_1_i(
@@ -65,7 +68,7 @@ def part_1_ii(
 
 def print_part_1_ii(result: float):
     print('1ii) Correlation Coefficient')
-    print(f'corre. coef. of S1 and S2 = {result}')
+    print(f'correlation coef. of S1 and S2 = {result}')
     print()
 
 
