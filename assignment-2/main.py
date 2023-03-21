@@ -139,6 +139,7 @@ def main(args: List[str]):
                 name=part_1_stock_2.name,
             )
         )
+        print()
         part1.run(
             part_1_stock_1,
             part_1_stock_2,
@@ -154,6 +155,7 @@ def main(args: List[str]):
                 name=part_2_stock.name,
             )
         )
+        print()
         part2.run(part_2_stock, read_stock_data)
         print()
 
