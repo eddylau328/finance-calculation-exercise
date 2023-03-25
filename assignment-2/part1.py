@@ -145,7 +145,14 @@ def part_1_ii(
     )
 
 
-def part_1_2_i(
+def print_part_1_ii(result: float):
+    print('1ii) Correlation Coefficient')
+    print(f'correlation coef. of S1 and S2 = {result}')
+    print()
+
+
+# PART 2
+def part_2_i(
     stock_1_records: List[StockRecord],
     stock_2_records: List[StockRecord],
     volatilities:Tuple[float, float], 
@@ -186,13 +193,6 @@ def part_1_2_i(
         print(n, 'path', option_price)
 
 
-def print_part_1_ii(result: float):
-    print('1ii) Correlation Coefficient')
-    print(f'correlation coef. of S1 and S2 = {result}')
-    print()
-
-
-# PART 2
 def part_2_ii(
     stock_1_records: List[StockRecord],
     stock_2_records: List[StockRecord],
@@ -253,7 +253,8 @@ def run(
     corr_coef = part_1_ii(stock_1_records, stock_2_records)
     print_part_1_ii(corr_coef)
 
-    part_1_2_i(stock_1_records, stock_2_records, volatilities, corr_coef)
+    part_2_i(stock_1_records, stock_2_records, volatilities, corr_coef)
+    # print_part_2_i(results)
 
     results = part_2_ii(stock_1_records, stock_2_records)
     print_part_2_ii(results)
