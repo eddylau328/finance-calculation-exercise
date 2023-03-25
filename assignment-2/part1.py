@@ -66,6 +66,47 @@ def part_1_ii(
     )
 
 
+def part_1_2_i(
+    stock_1_records: List[StockRecord],
+    stock_2_records: List[StockRecord],
+    volatilities:Tuple[float, float], 
+    corr_coef: float
+):
+    S10 = stock_1_records[-1].price
+    S20 = stock_2_records[-1].price
+    T = 1
+    dt = 1/180
+    r = 3.75/100
+
+    N = int(T / dt)    
+    n_paths = [1000, 10000, 100000, 500000]
+
+    for n in n_paths:
+        S1 = np.zeros((n, N+1))
+        S2 = np.zeros((n, N+1))
+        S1[:, 0] = S10
+        S2[:, 0] = S20 
+
+        for i in range(1, N+1):
+            z1 = np.random.normal(0 ,1, size=n)
+            z2 = corr_coef*z1 + np.sqrt(1 - corr_coef**2) * np.random.normal(0 ,1, size=n)
+
+            S1[:, i] = S1[:, i-1] * (1 + r * dt + volatilities[0] * z1 * np.sqrt(dt))
+            S2[:, i] = S2[:, i-1] * (1 + r * dt + volatilities[1] * z2 * np.sqrt(dt))
+
+        S11 = S1[:, int(N/2)]
+        S12 = S1[:,-1]
+        S21 = S2[:, int(N/2)]
+        S22 = S2[:,-1]
+
+        B1 = np.maximum(S11 / S10, S21 / S20)
+        B2 = np.maximum(S12 / S10, S22 / S20)
+        A = (B1 + B2) / 2
+        payoff = np.maximum(A - 1, 0)
+        option_price = np.mean(payoff) 
+        print(n, 'path', option_price)
+
+
 def print_part_1_ii(result: float):
     print('1ii) Correlation Coefficient')
     print(f'correlation coef. of S1 and S2 = {result}')
@@ -85,3 +126,5 @@ def run(
 
     corr_coef = part_1_ii(stock_1_records, stock_2_records)
     print_part_1_ii(corr_coef)
+
+    part_1_2_i(stock_1_records, stock_2_records, volatilities, corr_coef)
