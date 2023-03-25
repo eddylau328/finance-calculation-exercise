@@ -1,9 +1,7 @@
 from typing import List, Callable, Tuple
 from string import Template
-import time
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 from common import (
     Stock,
@@ -39,54 +37,6 @@ def calculate_correlation_coefficient(
     std_2_2 = calculate_realized_volatility(stock_2_prices) 
     covar_1_2 = np.sum(np.multiply(stock_1_diff, stock_2_diff)) * 252 / (n - 1)
     return covar_1_2 / (std_1_1 * std_2_2)
-
-
-def calculate_covariance_matrix(
-    stock_1_prices: List[float],
-    stock_2_prices: List[float],
-):
-    stock_1_log_returns = calculate_stock_price_log_returns(stock_1_prices)
-    stock_2_log_returns = calculate_stock_price_log_returns(stock_2_prices)
-    stock_1_diff = stock_1_log_returns - np.mean(stock_1_log_returns)
-    stock_2_diff = stock_2_log_returns - np.mean(stock_2_log_returns)
-    n = len(stock_1_prices)
-    std_1_1 = calculate_realized_volatility(stock_1_prices) 
-    std_2_2 = calculate_realized_volatility(stock_2_prices) 
-    covar_1_2 = np.sum(np.multiply(stock_1_diff, stock_2_diff)) * 252 / (n - 1)
-    cov_matrix = np.full(shape=(2, 2), fill_value=0.0)
-    cov_matrix[0][0] = np.power(std_1_1, 2)
-    cov_matrix[0][1] = covar_1_2
-    cov_matrix[1][1] = np.power(std_2_2, 2)
-    cov_matrix[1][0] = covar_1_2
-    return cov_matrix
-
-
-def calculate_mean_returns(
-    stock_1_prices: List[float],
-    stock_2_prices: List[float],
-):
-    stock_1_log_returns = calculate_stock_price_log_returns(stock_1_prices)
-    stock_2_log_returns = calculate_stock_price_log_returns(stock_2_prices)
-    return np.transpose(np.mean(np.vstack((stock_1_log_returns, stock_2_log_returns)), axis=1))
-
-
-def geo_paths(S, T, r, sigma, steps, N):
-    """
-    Inputs
-    # S = Current stock Price
-    # T = Time to maturity 1 year = 1, 1 months = 1/12
-    # r = risk free interest rate
-    # sigma = volatility 
-    
-    Output
-    # [steps,N] Matrix of asset paths 
-    """
-    dt = T/steps
-    ST = np.log(S) +  np.cumsum(((r - sigma**2/2)*dt +\
-                              sigma*np.sqrt(dt) * \
-                              np.random.normal(size=(steps,N))),axis=0)
-    
-    return np.exp(ST)
 
 
 def run_monte_carlo_discretization_scheme(
@@ -155,8 +105,8 @@ def print_part_1_ii(result: float):
 def part_2_i(
     stock_1_records: List[StockRecord],
     stock_2_records: List[StockRecord],
-    volatilities:Tuple[float, float], 
-    corr_coef: float
+    volatilities: Tuple[float, float],
+    corr_coef: float,
 ):
     S10 = stock_1_records[-1].price
     S20 = stock_2_records[-1].price
@@ -166,7 +116,7 @@ def part_2_i(
 
     N = int(T / dt)    
     n_paths = [1000, 10000, 100000, 500000]
-
+    results = []
     for n in n_paths:
         S1 = np.zeros((n, N+1))
         S2 = np.zeros((n, N+1))
@@ -190,39 +140,52 @@ def part_2_i(
         A = (B1 + B2) / 2
         payoff = np.maximum(A - 1, 0)
         option_price = np.mean(payoff) 
-        print(n, 'path', option_price)
+        results.append((n, option_price))
+    return results
+
+    
+def print_part_2_i(
+    results: List[Tuple[int, float]],
+):
+    print('2i) Monte Carlo scheme with time steps N = 180')
+    template = Template('$num_of_path paths: option price = $option_price')
+    for num_of_path, option_price in results:
+        print(template.safe_substitute(
+            num_of_path=f'{num_of_path:<6}',
+            option_price=f'{option_price}',
+        ))
+    print()
 
 
 def part_2_ii(
     stock_1_records: List[StockRecord],
     stock_2_records: List[StockRecord],
+    volatilities: Tuple[float, float],
+    corr_coef: float,
 ) -> List[Tuple[int, float]]:
     stock_1_prices = [r.price for r in stock_1_records]
     stock_2_prices = [r.price for r in stock_2_records]
-    stock_1_volatility = calculate_realized_volatility([r.price for r in stock_1_records])
-    stock_2_volatility = calculate_realized_volatility([r.price for r in stock_2_records])
-    corr = calculate_correlation_coefficient(stock_1_prices, stock_1_prices)
+    stock_1_volatility = volatilities[0]
+    stock_2_volatility = volatilities[1]
+    corr_coef = calculate_correlation_coefficient(stock_1_prices, stock_1_prices)
     maturity = 1
     risk_free_rate = 0.0375
     total_time_frame = 2
     num_of_paths = [1000, 10000, 100000, 500000]
     results = []
     for path in num_of_paths:
-        # start_time = time.time()
-        # print('path', path)
         average_option_price = run_monte_carlo_discretization_scheme(
             stock_1_prices[-1],
             stock_2_prices[-1],
             stock_1_volatility,
             stock_2_volatility,
-            corr,
+            corr_coef,
             maturity,
             risk_free_rate,
             total_time_frame,
             path,
         )
         results.append((path, average_option_price))
-        # print("--- %s seconds ---" % (np.round(time.time() - start_time, 5)))
 
     return results
 
@@ -237,6 +200,7 @@ def print_part_2_ii(
             num_of_path=f'{num_of_path:<6}',
             option_price=f'{option_price}',
         ))
+    print()
 
 
 def run(
@@ -253,8 +217,8 @@ def run(
     corr_coef = part_1_ii(stock_1_records, stock_2_records)
     print_part_1_ii(corr_coef)
 
-    part_2_i(stock_1_records, stock_2_records, volatilities, corr_coef)
-    # print_part_2_i(results)
+    results = part_2_i(stock_1_records, stock_2_records, volatilities, corr_coef)
+    print_part_2_i(results)
 
-    results = part_2_ii(stock_1_records, stock_2_records)
+    results = part_2_ii(stock_1_records, stock_2_records, volatilities, corr_coef)
     print_part_2_ii(results)
