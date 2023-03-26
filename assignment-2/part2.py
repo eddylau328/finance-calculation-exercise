@@ -67,13 +67,13 @@ def part2_1_1and2(stock: StockDetail):
 
 
 def part2_1_3(stock: StockDetail):
-    cp_rate_per_month= 0.01 / 100
+    cp_rate_per_month= 1.5 / 100
     fair_price = generate_fair_price(print_tag="part2) 3)",
-                        num_of_paths=1000,
+                        num_of_paths=500000,
                         stock=stock,
                         cp_rate_per_month=cp_rate_per_month)
     profit_margin = ((NOMINAL_AMOUNT-fair_price)/NOMINAL_AMOUNT) * 100
-    print(f"Profit margin of the investment bank = {profit_margin} when the CP level = {cp_rate_per_month*100}% ")
+    print(f"Profit margin of the investment bank = {np.round(profit_margin, 4)}% when the CP level = {cp_rate_per_month*100}% ")
 
 
 def generate_fair_price(print_tag: str,
@@ -82,8 +82,7 @@ def generate_fair_price(print_tag: str,
                         cp_rate_per_month: float
                         ):
     nominal = NOMINAL_AMOUNT
-    time_steps = 360  # Assume 1year = 360days
-    times = 30 * 7  # Assume 1month = 30days
+    time_steps = 210  # Assume 1year = 360days
     volatility = stock.implied_volatility
     auto_call_price = stock.initial_stock_price * stock.group.auto_call_level
     first_auto_call_times = 30
@@ -94,7 +93,7 @@ def generate_fair_price(print_tag: str,
     total_return = 0
     auto_call_count = 0
     for i in range(num_of_paths):
-        path_result = calculate_single_path(stock.initial_stock_price, nominal, time_steps, times, volatility, auto_call_price,
+        path_result = calculate_single_path(stock.initial_stock_price, nominal, time_steps, volatility, auto_call_price,
                                             first_auto_call_times, strike_price, knock_in_price, cp_interval,
                                             cp_rate_per_month)
         is_auto_call = path_result[0]
@@ -116,7 +115,6 @@ def calculate_single_path(
     initial_stock_price: float,
     nominal: float,
     time_steps: int,
-    times: int,
     volatility: float,
     auto_call_price: float,
     first_auto_call_times: int,
@@ -130,9 +128,9 @@ def calculate_single_path(
     delta_t = 1 / time_steps
     knock_in_occurred = False
     last_coupon_time = 0
-    for i in range(1, times + 1):
+    for i in range(1, time_steps + 1):
         epsilon = np.random.normal()
-        delta_s = INTEREST_RATE * delta_t + volatility * epsilon * math.sqrt(delta_t)
+        delta_s = stock_price * (INTEREST_RATE * delta_t + volatility * epsilon * math.sqrt(delta_t))
         stock_price += delta_s
         # print(f'{i} delta_s = {delta_s}, new_stock_price = {stock_price}')
 
